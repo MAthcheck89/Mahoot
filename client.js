@@ -15,12 +15,17 @@ function joinLobby() {
 }
 
 function startGame() {
-  const topics = [
-    document.getElementById('topic1').value,
-    document.getElementById('topic2').value,
-    document.getElementById('topic3').value,
-    document.getElementById('topic4').value
-  ].filter(t => t.trim() !== '');
+  const mainTopic = document.getElementById('mainTopic').value;
+  socket.emit('startGame', { roomCode: currentRoomCode, mainTopic });
+}
+
+// Add this anywhere in client.js with your other socket.on events
+socket.on('gameLoading', () => {
+  document.getElementById('lobby-screen').classList.add('hidden');
+  document.getElementById('game-screen').classList.remove('hidden');
+  document.getElementById('question-text').innerText = "🤖 AI is generating questions from the web... Get ready!";
+  document.getElementById('options-grid').innerHTML = '';
+});
 
   socket.emit('startGame', { roomCode: currentRoomCode, topics });
 }
