@@ -9,123 +9,211 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, './')));
 
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 const rooms = {};
 
-// Helper: Generate a 4-digit room code
+// Map user-typed topics to Open Trivia API Category IDs
+const categoryMap = {
+  math: 19,
+  gaming: 15,
+  games: 15,
+  science: 17,
+  history: 23,
+  geography: 22,
+  world: 22,
+  aviation: 28,
+  vehicles: 28,
+  computers: 18,
+  tech: 18,
+  music: 12,
+  movies: 11,
+  sports: 21,
+  anime: 31,
+  general: 9
+};
+
+// Helper: Decode the Base64 text from the API
+function decodeBase64(str) {
+  return Buffer.from(str, 'base64').toString('utf8');
+}
+
+// Fetch questions live from the internet!
+async function fetchQuestionsFromWeb(topicInput) {
+  let categoryId = 9; // Default to General Knowledge
+  
+  // Find matching category ID based on what the host typed
+  if (topicInput) {
+    const searchTopic = topicInput.toLowerCase();
+    const matchedKey = Object.keys(categoryMap).find(key => searchTopic.includes(key));
+    if (matchedKey) {
+      categoryId = categoryMap[matchedKey];
+    }
+  }
+
+  try {
+    // Fetch 10 multiple-choice questions in Base64 format to avoid weird text symbols
+    const url = `https://opentdb.com/api.php?amount=10&category=${categoryId}&type=multiple&encode=base64`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.results && data.results.length > 0) {
+      return data.results.map(q => {
+        const questionText = decodeBase64(q.question);
+        const correct = decodeBase64(q.correct_answer);
+        const incorrects = q.incorrect_answers.map(decodeBase64);
+
+        // Combine all answers and shuffle them randomly
+        const allOptions = [...incorrects, correct].sort(() => Math.random() - 0.5);
+        const correctIndex = allOptions.indexOf(correct);
+
+        return {
+          question: questionText,
+          options: allOptions,
+          answer: correctIndex
+        };
+      });
+    }
+  } catch (err) {
+    console.error("API Error:", err);
+  }
+
+  // Backup question if the internet fails
+  return [{ question: "Network error! What is 2 + 2?", options: ["3", "4", "5", "6"], answer: 1 }];
+}
+
 function generateRoomCode() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// Fallback AI Question Generator (Mocking AI generation for rapid gameplay)
-function generateQuestions(topics, count = 5) {
-  const sampleDatabase = [
-    { question: `What is the capital of France? (${topics[0] || 'General'})`, options: ['Paris', 'London', 'Berlin', 'Madrid'], answer: 0 },
-    { question: `Which planet is known as the Red Planet? (${topics[1] || 'Science'})`, options: ['Earth', 'Mars', 'Jupiter', 'Saturn'], answer: 1 },
-    { question: `How many wings does a Boeing 777 have? (${topics[2] || 'Aviation'})`, options: ['1 pair', '2 pairs', '3 pairs', 'None'], answer: 0 },
-    { question: `What is the largest ocean on Earth? (${topics[3] || 'World'})`, options: ['Atlantic', 'Indian', 'Pacific', 'Arctic'], answer: 2 }
-  ];
-  return sampleDatabase.slice(0, count);
+function startTimer(roomCode) {
+  const room = rooms[roomCode];
+  if (!room) return;
+
+  room.timeLeft = 15;
+  clearInterval(room.timerInterval);
+  io.to(roomCode).emit('timerUpdate', room.timeLeft);
+
+  room.timerInterval = setInterval(() => {
+    room.timeLeft -= 1;
+    io.to(roomCode).emit('timerUpdate', room.timeLeft);
+
+    if (room.timeLeft <= 0) {
+      endQuestionRound(roomCode);
+    }
+  }, 1000);
+}
+
+function endQuestionRound(roomCode) {
+  const room = rooms[roomCode];
+  if (!room) return;
+
+  clearInterval(room.timerInterval);
+  const currentQ = room.questions[room.currentQuestion];
+
+  io.to(roomCode).emit('roundEnded', {
+    correctAnswerText: currentQ.options[currentQ.answer],
+    players: room.players.sort((a, b) => b.score - a.score)
+  });
 }
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
-  // Host Creates Lobby
   socket.on('createRoom', ({ hostName }) => {
     const roomCode = generateRoomCode();
     rooms[roomCode] = {
       hostId: socket.id,
-      players: [{ id: socket.id, name: hostName, score: 0, streak: 0 }],
-      topics: [],
+      players: [{ id: socket.id, name: hostName, score: 0, streak: 0, answered: false }],
       questions: [],
       currentQuestion: 0,
-      state: 'LOBBY'
+      state: 'LOBBY',
+      timerInterval: null,
+      timeLeft: 15
     };
     socket.join(roomCode);
     socket.emit('roomCreated', { roomCode, players: rooms[roomCode].players });
   });
 
-  // Player Joins Lobby
   socket.on('joinRoom', ({ roomCode, playerName }) => {
     const room = rooms[roomCode];
-    if (!room) {
-      socket.emit('errorMsg', 'Room not found!');
-      return;
-    }
-    if (room.state !== 'LOBBY') {
-      socket.emit('errorMsg', 'Game already in progress!');
-      return;
-    }
+    if (!room) return socket.emit('errorMsg', 'Room not found!');
+    if (room.state !== 'LOBBY') return socket.emit('errorMsg', 'Game already started!');
 
-    const player = { id: socket.id, name: playerName, score: 0, streak: 0 };
-    room.players.push(player);
+    room.players.push({ id: socket.id, name: playerName, score: 0, streak: 0, answered: false });
     socket.join(roomCode);
 
     io.to(roomCode).emit('playerJoined', { players: room.players });
     socket.emit('joinedSuccess', { roomCode });
   });
 
-  // Host Starts Game with Selected Topics (Max 4)
-  socket.on('startGame', ({ roomCode, topics }) => {
+  // Async function because fetching from the web takes a second
+  socket.on('startGame', async ({ roomCode, mainTopic }) => {
     const room = rooms[roomCode];
     if (room && room.hostId === socket.id) {
-      room.topics = topics.slice(0, 4);
-      room.questions = generateQuestions(room.topics);
+      
+      // Let players know we are generating questions
+      io.to(roomCode).emit('gameLoading'); 
+
+      room.questions = await fetchQuestionsFromWeb(mainTopic);
       room.state = 'PLAYING';
       room.currentQuestion = 0;
 
-      io.to(roomCode).emit('gameStarted', {
-        question: room.questions[0],
-        questionIndex: 0,
-        totalQuestions: room.questions.length
-      });
+      sendCurrentQuestion(roomCode);
     }
   });
 
-  // Submit Answer
   socket.on('submitAnswer', ({ roomCode, answerIndex }) => {
     const room = rooms[roomCode];
-    if (!room) return;
+    if (!room || room.state !== 'PLAYING') return;
 
-    const currentQ = room.questions[room.currentQuestion];
     const player = room.players.find(p => p.id === socket.id);
+    if (!player || player.answered) return;
 
-    if (player && currentQ) {
-      if (answerIndex === currentQ.answer) {
-        player.streak += 1;
-        const multiplier = player.streak >= 3 ? 1.5 : 1;
-        player.score += Math.round(100 * multiplier);
-      } else {
-        player.streak = 0;
-      }
+    player.answered = true;
+    const currentQ = room.questions[room.currentQuestion];
+
+    if (answerIndex === currentQ.answer) {
+      player.streak += 1;
+      const speedBonus = room.timeLeft * 10;
+      const streakMultiplier = player.streak >= 3 ? 1.5 : 1.0;
+      player.score += Math.round((100 + speedBonus) * streakMultiplier);
+    } else {
+      player.streak = 0;
     }
 
-    // Broadcast Leaderboard
-    io.to(roomCode).emit('updateScores', { players: room.players });
+    if (room.players.every(p => p.answered)) {
+      endQuestionRound(roomCode);
+    }
   });
 
-  // Next Question / End Game
   socket.on('nextQuestion', ({ roomCode }) => {
     const room = rooms[roomCode];
     if (!room || room.hostId !== socket.id) return;
 
     room.currentQuestion += 1;
     if (room.currentQuestion < room.questions.length) {
-      io.to(roomCode).emit('newQuestion', {
-        question: room.questions[room.currentQuestion],
-        questionIndex: room.currentQuestion
-      });
+      sendCurrentQuestion(roomCode);
     } else {
-      io.to(roomCode).emit('gameOver', { players: room.players });
+      io.to(roomCode).emit('gameOver', { players: room.players.sort((a,b) => b.score - a.score) });
     }
-  });
-
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
   });
 });
 
+function sendCurrentQuestion(roomCode) {
+  const room = rooms[roomCode];
+  room.players.forEach(p => p.answered = false);
+
+  io.to(roomCode).emit('newQuestion', {
+    question: room.questions[room.currentQuestion],
+    questionIndex: room.currentQuestion + 1,
+    totalQuestions: room.questions.length
+  });
+
+  startTimer(roomCode);
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server live on port ${PORT}`);
 });
