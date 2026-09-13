@@ -1,7 +1,7 @@
 {
   "name": "ai-trivia-game",
   "version": "1.0.0",
-  "description": "AI Trivia Game with Multiplayer Lobbies",
+  "description": "Multiplayer AI Trivia",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
