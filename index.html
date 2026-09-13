@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Multiplayer Trivia</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>🧠 AI Trivia Showdown</h1>
+
+    <!-- MENU SCREEN -->
+    <div id="menu-screen">
+      <input type="text" id="username" placeholder="Enter your nickname">
+      <button onclick="createLobby()">Create Host Lobby</button>
+      <hr>
+      <input type="text" id="room-code-input" placeholder="4-Digit Code">
+      <button onclick="joinLobby()">Join Game</button>
+    </div>
+
+    <!-- LOBBY SCREEN -->
+    <div id="lobby-screen" class="hidden">
+      <h2>Lobby Code: <span id="lobby-code-display"></span></h2>
+      <h3>Players Joined:</h3>
+      <ul id="player-list"></ul>
+
+      <div id="host-controls" class="hidden">
+        <h3>Choose up to 4 Topics:</h3>
+        <input type="text" id="topic1" placeholder="Topic 1 (e.g. Aviation)">
+        <input type="text" id="topic2" placeholder="Topic 2 (e.g. Science)">
+        <input type="text" id="topic3" placeholder="Topic 3 (e.g. History)">
+        <input type="text" id="topic4" placeholder="Topic 4 (e.g. Video Games)">
+        <button onclick="startGame()">Start Game!</button>
+      </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="hidden">
+      <h2 id="question-text">Question goes here...</h2>
+      <div id="options-grid"></div>
+      <div id="host-next-btn" class="hidden">
+        <button onclick="nextQuestion()">Next Question ➔</button>
+      </div>
+      <h3>Leaderboard</h3>
+      <ul id="leaderboard"></ul>
+    </div>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>
