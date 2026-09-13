@@ -19,18 +19,9 @@ function startGame() {
   socket.emit('startGame', { roomCode: currentRoomCode, mainTopic });
 }
 
-// Add this anywhere in client.js with your other socket.on events
-socket.on('gameLoading', () => {
-  document.getElementById('lobby-screen').classList.add('hidden');
-  document.getElementById('game-screen').classList.remove('hidden');
-  document.getElementById('question-text').innerText = "🤖 AI is generating questions from the web... Get ready!";
-  document.getElementById('options-grid').innerHTML = '';
-});
-
-  socket.emit('startGame', { roomCode: currentRoomCode, topics });
-}
-
 function sendAnswer(index) {
+  const btns = document.querySelectorAll('#options-grid button');
+  btns.forEach(btn => btn.disabled = true);
   socket.emit('submitAnswer', { roomCode: currentRoomCode, answerIndex: index });
 }
 
@@ -38,7 +29,6 @@ function nextQuestion() {
   socket.emit('nextQuestion', { roomCode: currentRoomCode });
 }
 
-// Socket Events
 socket.on('roomCreated', ({ roomCode, players }) => {
   currentRoomCode = roomCode;
   document.getElementById('menu-screen').classList.add('hidden');
@@ -55,47 +45,57 @@ socket.on('joinedSuccess', ({ roomCode }) => {
   document.getElementById('lobby-code-display').innerText = roomCode;
 });
 
-socket.on('playerJoined', ({ players }) => {
-  updatePlayerList(players);
-});
+socket.on('playerJoined', ({ players }) => updatePlayerList(players));
 
-socket.on('gameStarted', ({ question }) => {
+socket.on('gameLoading', () => {
   document.getElementById('lobby-screen').classList.add('hidden');
   document.getElementById('game-screen').classList.remove('hidden');
-  if (isHost) document.getElementById('host-next-btn').classList.remove('hidden');
-  displayQuestion(question);
+  document.getElementById('question-text').innerText = "🤖 Fetching questions from the web...";
+  document.getElementById('options-grid').innerHTML = '';
 });
 
-socket.on('newQuestion', ({ question }) => {
-  displayQuestion(question);
+socket.on('newQuestion', ({ question, questionIndex, totalQuestions }) => {
+  document.getElementById('results-screen').classList.add('hidden');
+  document.getElementById('game-screen').classList.remove('hidden');
+  document.getElementById('question-tracker').innerText = `Question ${questionIndex}/${totalQuestions}`;
+  document.getElementById('question-text').innerText = question.question;
+
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  question.options.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    btn.innerText = opt;
+    btn.onclick = () => sendAnswer(idx);
+    grid.appendChild(btn);
+  });
 });
 
-socket.on('updateScores', ({ players }) => {
+socket.on('timerUpdate', (seconds) => {
+  document.getElementById('timer-display').innerText = seconds;
+});
+
+socket.on('roundEnded', ({ correctAnswerText, players }) => {
+  document.getElementById('game-screen').classList.add('hidden');
+  document.getElementById('results-screen').classList.remove('hidden');
+  document.getElementById('correct-answer-reveal').innerHTML = `Correct Answer: <strong>${correctAnswerText}</strong>`;
+  
   const lb = document.getElementById('leaderboard');
-  lb.innerHTML = players
-    .sort((a,b) => b.score - a.score)
-    .map(p => `<li>${p.name}: ${p.score} pts 🔥x${p.streak}</li>`).join('');
+  lb.innerHTML = players.map((p, i) => 
+    `<li><span>#${i + 1} ${p.name} ${p.streak >= 3 ? '🔥x' + p.streak : ''}</span> <strong>${p.score} pts</strong></li>`
+  ).join('');
+
+  if (isHost) document.getElementById('host-next-btn').classList.remove('hidden');
 });
 
 socket.on('gameOver', ({ players }) => {
-  document.getElementById('question-text').innerText = '🎉 Game Over!';
-  document.getElementById('options-grid').innerHTML = '';
+  document.getElementById('game-screen').classList.add('hidden');
+  document.getElementById('results-screen').classList.remove('hidden');
+  document.getElementById('correct-answer-reveal').innerText = "🎉 Game Finished! Final Rankings:";
+  document.getElementById('host-next-btn').classList.add('hidden');
 });
 
 socket.on('errorMsg', (msg) => alert(msg));
 
 function updatePlayerList(players) {
   document.getElementById('player-list').innerHTML = players.map(p => `<li>${p.name}</li>`).join('');
-}
-
-function displayQuestion(q) {
-  document.getElementById('question-text').innerText = q.question;
-  const grid = document.getElementById('options-grid');
-  grid.innerHTML = '';
-  q.options.forEach((opt, idx) => {
-    const btn = document.createElement('button');
-    btn.innerText = opt;
-    btn.onclick = () => sendAnswer(idx);
-    grid.appendChild(btn);
-  });
 }
