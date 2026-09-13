@@ -3,49 +3,54 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Multiplayer Trivia</title>
+  <title>Live API Trivia</title>
   <link rel="stylesheet" href="style.css">
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
   <div class="container">
-    <h1>🧠 AI Trivia Showdown</h1>
+    <h1>🌍 Live API Trivia</h1>
 
-    <!-- MENU SCREEN -->
     <div id="menu-screen">
-      <input type="text" id="username" placeholder="Enter your nickname">
+      <input type="text" id="username" placeholder="Majd">
       <button onclick="createLobby()">Create Host Lobby</button>
       <hr>
       <input type="text" id="room-code-input" placeholder="4-Digit Code">
       <button onclick="joinLobby()">Join Game</button>
     </div>
 
-    <!-- LOBBY SCREEN -->
     <div id="lobby-screen" class="hidden">
       <h2>Lobby Code: <span id="lobby-code-display"></span></h2>
-      <h3>Players Joined:</h3>
+      <h3>Players in Room:</h3>
       <ul id="player-list"></ul>
-
       <div id="host-controls" class="hidden">
         <h3>Choose a Topic:</h3>
-        <p><small>Math, Science, History, Geography, Gaming, Movies, Music, Sports, Tech, Aviation, Anime</small></p>
-        <input type="text" id="mainTopic" placeholder="Type a topic...">
+        <p><small>Math, Science, History, Gaming, Aviation, Tech...</small></p>
+        <input type="text" id="mainTopic" placeholder="e.g. aviation">
         <br>
         <button onclick="startGame()">Generate Questions & Start!</button>
       </div>
+    </div>
 
-    <!-- GAME SCREEN -->
     <div id="game-screen" class="hidden">
-      <h2 id="question-text">Question goes here...</h2>
+      <div id="question-header">
+        <span id="question-tracker">Question 1/10</span>
+        <div id="timer-box">⏱️ <span id="timer-display">15</span>s</div>
+      </div>
+      <h2 id="question-text">Loading question...</h2>
       <div id="options-grid"></div>
+    </div>
+
+    <div id="results-screen" class="hidden">
+      <h2>⏰ Time's Up!</h2>
+      <p id="correct-answer-reveal"></p>
+      <h3>🏆 Round Leaderboard</h3>
+      <ul id="leaderboard"></ul>
       <div id="host-next-btn" class="hidden">
         <button onclick="nextQuestion()">Next Question ➔</button>
       </div>
-      <h3>Leaderboard</h3>
-      <ul id="leaderboard"></ul>
     </div>
   </div>
-
   <script src="client.js"></script>
 </body>
 </html>
