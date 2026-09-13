@@ -27,14 +27,12 @@
       <ul id="player-list"></ul>
 
       <div id="host-controls" class="hidden">
-        <h3>Choose up to 4 Topics:</h3>
-        <input type="text" id="topic1" placeholder="Topic 1 (e.g. Aviation)">
-        <input type="text" id="topic2" placeholder="Topic 2 (e.g. Science)">
-        <input type="text" id="topic3" placeholder="Topic 3 (e.g. History)">
-        <input type="text" id="topic4" placeholder="Topic 4 (e.g. Video Games)">
-        <button onclick="startGame()">Start Game!</button>
+        <h3>Choose a Topic:</h3>
+        <p><small>Math, Science, History, Geography, Gaming, Movies, Music, Sports, Tech, Aviation, Anime</small></p>
+        <input type="text" id="mainTopic" placeholder="Type a topic...">
+        <br>
+        <button onclick="startGame()">Generate Questions & Start!</button>
       </div>
-    </div>
 
     <!-- GAME SCREEN -->
     <div id="game-screen" class="hidden">
